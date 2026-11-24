@@ -855,8 +855,7 @@
               style="background:${c.hex}" title="${c.name}"></button>
           `).join('');
 
-          const tipsText = (p.tips || []).join('
-');
+          const tipsText = (p.tips || []).join('\n');
 
           return `
             <div class="rounded-xl bg-[#070d19] border p-3.5 space-y-2.5" style="border-color: ${p.color}55">
@@ -966,9 +965,7 @@ Rules:
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                contents: [{ parts: [{ text: `${sysPrompt}
-
-Teacher input: ${prompt}` }] }],
+                contents: [{ parts: [{ text: `${sysPrompt}\n\nTeacher input: ${prompt}` }] }],
                 generationConfig: { responseMimeType: 'application/json' }
               })
             });
@@ -1046,18 +1043,19 @@ Teacher input: ${prompt}` }] }],
       function pickSmartEmoji(text) {
         const lower = text.toLowerCase();
         if (lower.includes('warm') || lower.includes('bell') || lower.includes('intro')) return '⚡';
-        if (lower.includes('plan') || lower.includes('brainstorm') || lower.includes('outline')) return '📝';
+        if (lower.includes('plan') || lower.includes('brainstorm') || lower.includes('outline') || lower.includes('round')) return '📝';
         if (lower.includes('read') || lower.includes('text') || lower.includes('vocab') || lower.includes('spell')) return '📖';
+        if (lower.includes('math') || lower.includes('subtract') || lower.includes('add') || lower.includes('number')) return '🧮';
         if (lower.includes('lab') || lower.includes('science') || lower.includes('experiment')) return '🔬';
         if (lower.includes('tech') || lower.includes('code') || lower.includes('computer')) return '💻';
         if (lower.includes('group') || lower.includes('pair') || lower.includes('discuss') || lower.includes('station')) return '🤝';
         if (lower.includes('art') || lower.includes('draw') || lower.includes('build') || lower.includes('create')) return '🎨';
-        if (lower.includes('quiz') || lower.includes('test') || lower.includes('exit') || lower.includes('wrap')) return '🏁';
+        if (lower.includes('quiz') || lower.includes('test') || lower.includes('exit') || lower.includes('wrap') || lower.includes('reflect') || lower.includes('journal')) return '🏁';
         return '🎯';
       }
 
       function buildLocalLessonPlan(prompt, fallbackTotal) {
-        const totalMatch = prompt.match(/^(\d+)\s*(?:min|minute|minutes|m) [:\-,]?\s*/i);
+        const totalMatch = prompt.match(/^(\d+)\s*(?:min|minute|minutes|m)\b[:\-,]?\s*/i);
         let total = totalMatch ? parseInt(totalMatch[1], 10) : fallbackTotal;
         let remainder = totalMatch ? prompt.slice(totalMatch[0].length) : prompt;
 
@@ -1067,14 +1065,16 @@ Teacher input: ${prompt}` }] }],
           sessionTitle = remainder.slice(0, colonIdx).trim();
           remainder = remainder.slice(colonIdx + 1).trim();
         } else {
-          const words = remainder.replace(/\d+\s*(?:min|minutes|m) /gi, '').trim().split(/\s+/).slice(0, 3);
-          if (words.length && words[0]) {
-            sessionTitle = words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+          const subjectMatch = remainder.match(/(?:math|spelling|reading|writing|science|history|ecosystems|fractions|subtraction|addition)\s*(?:lesson)?/i);
+          if (subjectMatch) {
+            sessionTitle = subjectMatch[0]
+              .split(/\s+/)
+              .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+              .join(' ');
           }
         }
 
-        const segmentRegex = /(\d+)\s*(?:min|minutes|m) \s*([^,;.
-]+)/gi;
+        const segmentRegex = /(\d+)\s*(?:min|minutes|m)\b\s*([^,;.\n]+)/gi;
         const found = [];
         let match;
         while ((match = segmentRegex.exec(remainder)) !== null) {
@@ -1095,7 +1095,7 @@ Teacher input: ${prompt}` }] }],
 
         if (found.length >= 2) {
           const sum = found.reduce((a, b) => a + b.minutes, 0);
-          if (!totalMatch) total = sum;
+          if (!totalMatch && sum > total) total = sum;
           return { sessionTitle, totalMinutes: total, sections: found };
         }
 
@@ -1115,10 +1115,10 @@ Teacher input: ${prompt}` }] }],
 
       function generateLocalTips(phaseTitle, context) {
         const lower = `${phaseTitle} ${context}`.toLowerCase();
-        if (lower.includes('plan') || lower.includes('warm') || lower.includes('intro')) {
+        if (lower.includes('plan') || lower.includes('warm') || lower.includes('intro') || lower.includes('round')) {
           return [
             'Read the prompt and gather supplies',
-            'Outline your key goal first',
+            'Estimate and outline your steps first',
             'Check instructions before starting'
           ];
         }
@@ -1136,10 +1136,10 @@ Teacher input: ${prompt}` }] }],
             'Keep voices at table volume'
           ];
         }
-        if (lower.includes('wrap') || lower.includes('exit') || lower.includes('quiz') || lower.includes('clean')) {
+        if (lower.includes('wrap') || lower.includes('exit') || lower.includes('quiz') || lower.includes('reflect') || lower.includes('journal')) {
           return [
-            'Double-check name and final answers',
-            'Turn in work to the tray',
+            'Review your work and check answers',
+            'Complete your reflection prompt',
             'Reset workspace for next class'
           ];
         }
@@ -1423,8 +1423,7 @@ Teacher input: ${prompt}` }] }],
           phase.minutes = Math.max(1, Math.min(180, parseInt(target.value, 10) || 1));
           renderMiniPie();
         } else if (action === 'tips') {
-          phase.tips = target.value.split('
-').map((s) => s.trim()).filter(Boolean);
+          phase.tips = target.value.split('\n').map((s) => s.trim()).filter(Boolean);
         }
       });
 
