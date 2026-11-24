@@ -435,7 +435,7 @@
         totalMinutes: 45,
         chime: 'gong',
         muted: false,
-        sweepMode: 'hand', // 'hand' | 'disappear'
+        sweepMode: 'hand',
         isRunning: false,
         elapsedSeconds: 0,
         lastTickMs: null,
@@ -499,9 +499,6 @@
 
       const $ = (id) => document.getElementById(id);
 
-      // =========================================================
-      // API KEY MANAGEMENT
-      // =========================================================
       function getApiKey() {
         return (localStorage.getItem(STORAGE_KEY) || '').trim();
       }
@@ -519,9 +516,6 @@
         }
       }
 
-      // =========================================================
-      // AUDIO SYNTHESIZER (WEB AUDIO API)
-      // =========================================================
       let audioCtx = null;
       function getAudioCtx() {
         if (!audioCtx) {
@@ -587,9 +581,6 @@
         banner.classList.add('flash-ring');
       }
 
-      // =========================================================
-      // SVG PIE-CHART GEOMETRY HELPERS
-      // =========================================================
       function polarToCartesian(cx, cy, r, angleDeg) {
         const rad = ((angleDeg - 90) * Math.PI) / 180;
         return {
@@ -620,9 +611,6 @@
         return `<path d="${d}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round" ${clipAttr} />`;
       }
 
-      // =========================================================
-      // RENDER MINI PIE PREVIEW (SETUP VIEW)
-      // =========================================================
       function renderMiniPie() {
         const svg = $('mini-pie-svg');
         const total = Math.max(1, state.totalMinutes);
@@ -651,9 +639,6 @@
         svg.innerHTML = html;
       }
 
-      // =========================================================
-      // RENDER BROADCAST CLOCK SVG
-      // =========================================================
       function renderBroadcastClock() {
         const svg = $('broadcast-clock-svg');
         const cx = 250;
@@ -760,9 +745,6 @@
         `;
       }
 
-      // =========================================================
-      // ACTIVE PHASE CALCULATION & BROADCAST UI SYNC
-      // =========================================================
       function getPhaseTimeline() {
         let accSec = 0;
         return state.phases.map((p, index) => {
@@ -860,9 +842,6 @@
         renderBroadcastClock();
       }
 
-      // =========================================================
-      // RENDER PHASE EDITOR CARDS (SETUP VIEW)
-      // =========================================================
       function renderPhasesEditor() {
         const container = $('phases-container');
         container.innerHTML = state.phases.map((p, idx) => {
@@ -876,7 +855,8 @@
               style="background:${c.hex}" title="${c.name}"></button>
           `).join('');
 
-          const tipsText = (p.tips || []).join('\n');
+          const tipsText = (p.tips || []).join('
+');
 
           return `
             <div class="rounded-xl bg-[#070d19] border p-3.5 space-y-2.5" style="border-color: ${p.color}55">
@@ -921,9 +901,6 @@
         renderMiniPie();
       }
 
-      // =========================================================
-      // TIMER LOOP
-      // =========================================================
       function tick(nowMs) {
         if (state.isRunning) {
           if (state.lastTickMs !== null) {
@@ -945,9 +922,6 @@
       }
       requestAnimationFrame(tick);
 
-      // =========================================================
-      // FULL LESSON CLOCK & TIPS GENERATOR (GEMINI + OFFLINE)
-      // =========================================================
       async function buildClockFromPrompt() {
         const prompt = $('ai-prompt-input').value.trim();
         if (!prompt) {
@@ -992,7 +966,9 @@ Rules:
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                contents: [{ parts: [{ text: `${sysPrompt}\n\nTeacher input: ${prompt}` }] }],
+                contents: [{ parts: [{ text: `${sysPrompt}
+
+Teacher input: ${prompt}` }] }],
                 generationConfig: { responseMimeType: 'application/json' }
               })
             });
@@ -1008,7 +984,6 @@ Rules:
               status.textContent = 'API error — using smart local builder...';
             }
           } catch (_) {
-            // Fall through to local builder
           }
         }
 
@@ -1051,7 +1026,6 @@ Rules:
             : generateLocalTips(sec.title || '', '')
         }));
 
-        // Reconcile minutes to match totalMinutes cleanly
         const currentSum = state.phases.reduce((s, p) => s + p.minutes, 0);
         if (currentSum !== targetTotal && state.phases.length > 0) {
           const diff = targetTotal - currentSum;
@@ -1073,7 +1047,7 @@ Rules:
         const lower = text.toLowerCase();
         if (lower.includes('warm') || lower.includes('bell') || lower.includes('intro')) return '⚡';
         if (lower.includes('plan') || lower.includes('brainstorm') || lower.includes('outline')) return '📝';
-        if (lower.includes('read') || lower.includes('text') || lower.includes('vocab')) return '📖';
+        if (lower.includes('read') || lower.includes('text') || lower.includes('vocab') || lower.includes('spell')) return '📖';
         if (lower.includes('lab') || lower.includes('science') || lower.includes('experiment')) return '🔬';
         if (lower.includes('tech') || lower.includes('code') || lower.includes('computer')) return '💻';
         if (lower.includes('group') || lower.includes('pair') || lower.includes('discuss') || lower.includes('station')) return '🤝';
@@ -1083,25 +1057,24 @@ Rules:
       }
 
       function buildLocalLessonPlan(prompt, fallbackTotal) {
-        const totalMatch = prompt.match(/^(\d+)\s*(?:min|minute|minutes|m)\b[:\-,]?\s*/i);
+        const totalMatch = prompt.match(/^(\d+)\s*(?:min|minute|minutes|m) [:\-,]?\s*/i);
         let total = totalMatch ? parseInt(totalMatch[1], 10) : fallbackTotal;
         let remainder = totalMatch ? prompt.slice(totalMatch[0].length) : prompt;
 
-        // Extract session title if separated by colon
         let sessionTitle = 'Lesson Plan';
         const colonIdx = remainder.indexOf(':');
         if (colonIdx > 0 && colonIdx < 45) {
           sessionTitle = remainder.slice(0, colonIdx).trim();
           remainder = remainder.slice(colonIdx + 1).trim();
         } else {
-          const words = remainder.replace(/\d+\s*(?:min|minutes|m)\b/gi, '').trim().split(/\s+/).slice(0, 3);
+          const words = remainder.replace(/\d+\s*(?:min|minutes|m) /gi, '').trim().split(/\s+/).slice(0, 3);
           if (words.length && words[0]) {
             sessionTitle = words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
           }
         }
 
-        // Parse segments like "10 min vocab warm-up, 20 min stations, 15 min exit quiz"
-        const segmentRegex = /(\d+)\s*(?:min|minutes|m)\b\s*([^,;.\n]+)/gi;
+        const segmentRegex = /(\d+)\s*(?:min|minutes|m) \s*([^,;.
+]+)/gi;
         const found = [];
         let match;
         while ((match = segmentRegex.exec(remainder)) !== null) {
@@ -1126,7 +1099,6 @@ Rules:
           return { sessionTitle, totalMinutes: total, sections: found };
         }
 
-        // Default 3-part structure tailored to the prompt topic
         const p1 = Math.max(1, Math.round(total * 0.25));
         const p2 = Math.max(1, Math.round(total * 0.55));
         const p3 = Math.max(1, total - p1 - p2);
@@ -1150,11 +1122,11 @@ Rules:
             'Check instructions before starting'
           ];
         }
-        if (lower.includes('read') || lower.includes('vocab') || lower.includes('research')) {
+        if (lower.includes('read') || lower.includes('vocab') || lower.includes('research') || lower.includes('spell')) {
           return [
-            'Scan headings and key vocabulary',
-            'Highlight main evidence in text',
-            'Jot down 2 key takeaways'
+            'Scan headings and key words',
+            'Break tricky words into parts',
+            'Write and check your work'
           ];
         }
         if (lower.includes('group') || lower.includes('partner') || lower.includes('station')) {
@@ -1178,9 +1150,6 @@ Rules:
         ];
       }
 
-      // =========================================================
-      // DUAL-ENGINE VOICE-TO-TEXT DICTATION
-      // =========================================================
       let isRecording = false;
       let speechRec = null;
       let mediaRecorder = null;
@@ -1262,7 +1231,6 @@ Rules:
             };
 
             speechRec.onerror = () => {
-              // MediaRecorder fallback remains active
             };
 
             speechRec.start();
@@ -1350,9 +1318,6 @@ Rules:
         setTimeout(() => status.classList.add('hidden'), 2500);
       }
 
-      // =========================================================
-      // ICON & API MODAL LOGIC
-      // =========================================================
       function openIconModal(phaseId) {
         state.editingIconPhaseId = phaseId;
         const grid = $('emoji-grid');
@@ -1378,19 +1343,16 @@ Rules:
 
       function escapeHtml(str) {
         return String(str || '')
-          .replace(/&/g, '&')
-          .replace(/</g, '<')
-          .replace(/>/g, '>')
-          .replace(/"/g, '"');
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
       }
 
       function escapeAttr(str) {
-        return escapeHtml(str).replace(/'/g, ''');
+        return escapeHtml(str).replace(/'/g, '&#39;');
       }
 
-      // =========================================================
-      // EVENT LISTENERS
-      // =========================================================
       $('session-title-input').addEventListener('input', (e) => {
         state.sessionTitle = e.target.value;
       });
@@ -1461,7 +1423,8 @@ Rules:
           phase.minutes = Math.max(1, Math.min(180, parseInt(target.value, 10) || 1));
           renderMiniPie();
         } else if (action === 'tips') {
-          phase.tips = target.value.split('\n').map((s) => s.trim()).filter(Boolean);
+          phase.tips = target.value.split('
+').map((s) => s.trim()).filter(Boolean);
         }
       });
 
@@ -1494,7 +1457,6 @@ Rules:
         }
       });
 
-      // Icon Modal Events
       $('emoji-grid').addEventListener('click', (e) => {
         const btn = e.target.closest('[data-pick-emoji]');
         if (!btn) return;
@@ -1521,7 +1483,6 @@ Rules:
         $('icon-modal').classList.add('hidden');
       });
 
-      // API Key Modal Events
       $('open-api-modal-btn').addEventListener('click', () => {
         $('api-key-input').value = getApiKey();
         $('api-modal').classList.remove('hidden');
@@ -1548,7 +1509,6 @@ Rules:
         updateApiStatusBadge();
       });
 
-      // AI & Voice Events
       $('voice-btn').addEventListener('click', toggleVoiceDictation);
       $('generate-ai-btn').addEventListener('click', buildClockFromPrompt);
       $('clear-prompt-btn').addEventListener('click', () => {
@@ -1556,7 +1516,6 @@ Rules:
         $('ai-prompt-input').focus();
       });
 
-      // Broadcast Mode Transitions & Controls
       $('enter-broadcast-btn').addEventListener('click', () => {
         if (isRecording) stopVoiceDictation();
         getAudioCtx();
@@ -1630,7 +1589,6 @@ Rules:
         updateBroadcastUI();
       });
 
-      // Initial Boot
       updateApiStatusBadge();
       renderPhasesEditor();
     })();
