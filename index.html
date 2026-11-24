@@ -231,7 +231,7 @@
           </div>
 
           <textarea id="ai-prompt-input" rows="3"
-            placeholder="Describe your lesson & times (e.g. '45 min Ecosystems Lesson: 10 min vocab warm-up, 20 min food web stations, 15 min exit quiz')..."
+            placeholder="Describe your lesson & times (e.g. 'Story Writing: 10 minutes planning, 30 minutes writing, 5 minutes reading over')..."
             class="cyber-input w-full rounded-xl p-3 text-base font-semibold leading-snug resize-none"></textarea>
 
           <div id="voice-interim-box" class="hidden text-xs font-mono-tech text-pink-300 bg-pink-950/30 border border-pink-500/30 rounded-lg px-2.5 py-1.5"></div>
@@ -890,7 +890,7 @@
                 </div>
               </div>
 
-              <textarea rows="2" data-action="tips" data-id="${p.id}"
+              <textarea rows="3" data-action="tips" data-id="${p.id}"
                 placeholder="Student steps (one per line)..."
                 class="cyber-input w-full rounded-xl px-3 py-2 text-sm font-semibold text-slate-200 leading-snug resize-none">${escapeHtml(tipsText)}</textarea>
             </div>
@@ -959,7 +959,7 @@ Return ONLY valid JSON matching this exact schema:
 Rules:
 - Create 2 to 6 logical lesson sections whose minutes add up to totalMinutes.
 - Keep section titles concise so they look great on a classroom smartboard.
-- Make tips concrete, action-oriented student steps.`;
+- Make tips unique, concrete, action-oriented student steps tailored specifically to each section.`;
 
             const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
               method: 'POST',
@@ -994,7 +994,7 @@ Rules:
         label.textContent = 'Build Clock & Tips';
         status.textContent = apiKey
           ? `✓ Built "${state.sessionTitle}" (${state.phases.length} sections)`
-          : `✓ Built "${state.sessionTitle}" (Add API Key for full AI)`;
+          : `✓ Built "${state.sessionTitle}" (${state.phases.length} sections)`;
         setTimeout(() => status.classList.add('hidden'), 4000);
       }
 
@@ -1020,7 +1020,7 @@ Rules:
           color: PALETTE[idx % PALETTE.length].hex,
           tips: Array.isArray(sec.tips) && sec.tips.length
             ? sec.tips.slice(0, 4).map((t) => String(t).trim())
-            : generateLocalTips(sec.title || '', '')
+            : generateLocalTips(sec.title || '')
         }));
 
         const currentSum = state.phases.reduce((s, p) => s + p.minutes, 0);
@@ -1040,11 +1040,28 @@ Rules:
         renderPhasesEditor();
       }
 
+      function normalizeSpokenNumbers(text) {
+        const wordNums = {
+          one: 1, two: 2, three: 3, four: 4, five: 5,
+          six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+          eleven: 11, twelve: 12, fifteen: 15, twenty: 20,
+          twentyfive: 25, thirty: 30, forty: 40, fortyfive: 45, fifty: 50, sixty: 60
+        };
+        return text
+          .replace(/\btwenty[\s-]five\b/gi, '25')
+          .replace(/\bthirty[\s-]five\b/gi, '35')
+          .replace(/\bforty[\s-]five\b/gi, '45')
+          .replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|sixty)\b/gi, (m) => {
+            return String(wordNums[m.toLowerCase()] || m);
+          });
+      }
+
       function pickSmartEmoji(text) {
         const lower = text.toLowerCase();
         if (lower.includes('warm') || lower.includes('bell') || lower.includes('intro')) return '⚡';
         if (lower.includes('plan') || lower.includes('brainstorm') || lower.includes('outline') || lower.includes('round')) return '📝';
-        if (lower.includes('read') || lower.includes('text') || lower.includes('vocab') || lower.includes('spell')) return '📖';
+        if (lower.includes('write') || lower.includes('writing') || lower.includes('draft') || lower.includes('story')) return '✏️';
+        if (lower.includes('read') || lower.includes('text') || lower.includes('vocab') || lower.includes('spell') || lower.includes('review') || lower.includes('edit')) return '📖';
         if (lower.includes('math') || lower.includes('subtract') || lower.includes('add') || lower.includes('number')) return '🧮';
         if (lower.includes('lab') || lower.includes('science') || lower.includes('experiment')) return '🔬';
         if (lower.includes('tech') || lower.includes('code') || lower.includes('computer')) return '💻';
@@ -1054,51 +1071,69 @@ Rules:
         return '🎯';
       }
 
-      function buildLocalLessonPlan(prompt, fallbackTotal) {
-        const totalMatch = prompt.match(/^(\d+)\s*(?:min|minute|minutes|m)\b[:\-,]?\s*/i);
-        let total = totalMatch ? parseInt(totalMatch[1], 10) : fallbackTotal;
-        let remainder = totalMatch ? prompt.slice(totalMatch[0].length) : prompt;
+      function cleanSectionLabel(raw) {
+        const cleaned = raw
+          .replace(/^(?:of|on|for|at the end|to|spend|them|they need to|and then|then|-)\s+/gi, '')
+          .replace(/\b(?:their|it|activity)\b/gi, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (!cleaned) return '';
+        return cleaned
+          .split(/\s+/)
+          .slice(0, 3)
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ');
+      }
+
+      function buildLocalLessonPlan(rawPrompt, fallbackTotal) {
+        const prompt = normalizeSpokenNumbers(rawPrompt);
 
         let sessionTitle = 'Lesson Plan';
-        const colonIdx = remainder.indexOf(':');
-        if (colonIdx > 0 && colonIdx < 45) {
-          sessionTitle = remainder.slice(0, colonIdx).trim();
-          remainder = remainder.slice(colonIdx + 1).trim();
+        const topicMatch = prompt.match(/(?:story writing|creative writing|math|spelling|reading|writing|science|history|ecosystems|fractions|subtraction|addition)\s*(?:lesson|activity)?/i);
+        if (topicMatch) {
+          sessionTitle = topicMatch[0]
+            .split(/\s+/)
+            .slice(0, 3)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
         } else {
-          const subjectMatch = remainder.match(/(?:math|spelling|reading|writing|science|history|ecosystems|fractions|subtraction|addition)\s*(?:lesson)?/i);
-          if (subjectMatch) {
-            sessionTitle = subjectMatch[0]
-              .split(/\s+/)
-              .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-              .join(' ');
+          const colonIdx = prompt.indexOf(':');
+          if (colonIdx > 0 && colonIdx < 40) {
+            sessionTitle = prompt.slice(0, colonIdx).trim();
           }
         }
 
-        const segmentRegex = /(\d+)\s*(?:min|minutes|m)\b\s*([^,;.\n]+)/gi;
+        // Match every "<number> min/minutes" occurrence and capture the activity text right after it
+        const matches = [...prompt.matchAll(/(\d+)\s*(?:min|minutes|m)\b/gi)];
         const found = [];
-        let match;
-        while ((match = segmentRegex.exec(remainder)) !== null) {
-          const mins = parseInt(match[1], 10);
-          const rawLabel = match[2].replace(/^(of|on|for|-)\s+/i, '').trim();
-          const title = rawLabel
-            .split(/\s+/)
-            .slice(0, 4)
-            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-            .join(' ');
-          found.push({
-            title: title || `Part ${found.length + 1}`,
-            minutes: mins,
-            icon: pickSmartEmoji(rawLabel),
-            tips: generateLocalTips(title, rawLabel)
-          });
-        }
 
-        if (found.length >= 2) {
+        if (matches.length >= 2) {
+          for (let i = 0; i < matches.length; i += 1) {
+            const mins = parseInt(matches[i][1], 10);
+            const afterStart = matches[i].index + matches[i][0].length;
+            const afterEnd = i + 1 < matches.length ? matches[i + 1].index : prompt.length;
+            let segmentText = prompt.slice(afterStart, afterEnd)
+              .replace(/\b(?:and then|then|next|after that|at the end|they need to)\b/gi, ' ')
+              .trim();
+
+            const title = cleanSectionLabel(segmentText) || `Section ${i + 1}`;
+            found.push({
+              title,
+              minutes: mins,
+              icon: pickSmartEmoji(title),
+              tips: generateLocalTips(title)
+            });
+          }
+
           const sum = found.reduce((a, b) => a + b.minutes, 0);
-          if (!totalMatch && sum > total) total = sum;
-          return { sessionTitle, totalMinutes: total, sections: found };
+          return {
+            sessionTitle,
+            totalMinutes: sum > 0 ? sum : fallbackTotal,
+            sections: found
+          };
         }
 
+        const total = fallbackTotal;
         const p1 = Math.max(1, Math.round(total * 0.25));
         const p2 = Math.max(1, Math.round(total * 0.55));
         const p3 = Math.max(1, total - p1 - p2);
@@ -1106,47 +1141,54 @@ Rules:
           sessionTitle,
           totalMinutes: total,
           sections: [
-            { title: 'Launch & Plan', minutes: p1, icon: '📝', tips: generateLocalTips('Planning', prompt) },
-            { title: 'Core Activity', minutes: p2, icon: pickSmartEmoji(prompt), tips: generateLocalTips('Practice', prompt) },
-            { title: 'Wrap-Up Check', minutes: p3, icon: '🏁', tips: generateLocalTips('Wrap-Up', prompt) }
+            { title: 'Launch & Plan', minutes: p1, icon: '📝', tips: generateLocalTips('Planning') },
+            { title: 'Core Activity', minutes: p2, icon: pickSmartEmoji(prompt), tips: generateLocalTips('Writing') },
+            { title: 'Wrap-Up Check', minutes: p3, icon: '🏁', tips: generateLocalTips('Review') }
           ]
         };
       }
 
-      function generateLocalTips(phaseTitle, context) {
-        const lower = `${phaseTitle} ${context}`.toLowerCase();
-        if (lower.includes('plan') || lower.includes('warm') || lower.includes('intro') || lower.includes('round')) {
+      function generateLocalTips(phaseTitle) {
+        const lower = String(phaseTitle || '').toLowerCase();
+        if (lower.includes('plan') || lower.includes('warm') || lower.includes('intro') || lower.includes('round') || lower.includes('brainstorm')) {
           return [
-            'Read the prompt and gather supplies',
-            'Estimate and outline your steps first',
-            'Check instructions before starting'
+            'Brainstorm your main characters and setting',
+            'Outline beginning, middle, and end',
+            'Check your materials before drafting'
           ];
         }
-        if (lower.includes('read') || lower.includes('vocab') || lower.includes('research') || lower.includes('spell')) {
+        if (lower.includes('write') || lower.includes('writing') || lower.includes('draft') || lower.includes('core') || lower.includes('practice')) {
           return [
-            'Scan headings and key words',
-            'Break tricky words into parts',
-            'Write and check your work'
+            'Follow your plan and keep writing',
+            'Use descriptive details and strong verbs',
+            'Stay focused and watch the clock'
+          ];
+        }
+        if (lower.includes('read') || lower.includes('edit') || lower.includes('review') || lower.includes('check') || lower.includes('over')) {
+          return [
+            'Read your work quietly from the start',
+            'Fix spelling, capitals, and punctuation',
+            'Make sure every sentence makes sense'
           ];
         }
         if (lower.includes('group') || lower.includes('partner') || lower.includes('station')) {
           return [
             'Share roles and listen actively',
-            'Compare answers with your partner',
+            'Compare ideas with your partner',
             'Keep voices at table volume'
           ];
         }
         if (lower.includes('wrap') || lower.includes('exit') || lower.includes('quiz') || lower.includes('reflect') || lower.includes('journal')) {
           return [
-            'Review your work and check answers',
-            'Complete your reflection prompt',
-            'Reset workspace for next class'
+            'Check that your name is on your work',
+            'Complete your final reflection check',
+            'Tidy your workspace for next class'
           ];
         }
         return [
-          `Focus on ${phaseTitle || 'the task'} step by step`,
-          'Use resources if you get stuck',
-          'Check quality before moving on'
+          `Focus on ${phaseTitle || 'this step'} one part at a time`,
+          'Use your checklist if you get stuck',
+          'Check your progress before time ends'
         ];
       }
 
